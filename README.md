@@ -16,8 +16,8 @@ detalle renderizada en servidor (SSR).
 Requisitos: Docker con Docker Compose v2.
 
 ```bash
-git clone <tu-repo>
-cd <repo>
+git clone https://github.com/UGachuzD/pruebaTecnicaSoftware.git
+cd pruebaTecnicaSoftware
 cp .env.example .env
 docker compose up --build
 ```
@@ -153,6 +153,19 @@ npx tsc --noEmit           # TypeScript en modo strict
 Los tests del webhook usan un repositorio en memoria inyectado con `dependency_overrides`, por lo
 que no requieren MongoDB.
 
+### Integración continua (GitHub Actions)
+
+`.github/workflows/ci.yml` se ejecuta en cada `push` y `pull_request` a `main`, con dos jobs en
+paralelo:
+
+| Job        | Pasos                                                                  |
+| ---------- | ---------------------------------------------------------------------- |
+| `backend`  | Python 3.12 → `pip install -r requirements-dev.txt` → `ruff check` → `ruff format --check` → `pytest` |
+| `frontend` | Node 22 → `npm ci` → `npm run lint` → `npx tsc --noEmit`              |
+
+Los comandos son los mismos que se corren en local, así que un fallo en CI se reproduce igual en la
+máquina del desarrollador.
+
 ## Base de datos: MongoDB
 
 **Por qué MongoDB:** el agregado principal es el ticket con su hilo de comentarios, que siempre se
@@ -230,9 +243,9 @@ recibe `409`.
 
 ## Qué dejé fuera y por qué
 
-- **Todos los puntos bonus** (protección contra replay, idempotencia por `event_id`, reconexión
-  automática del WebSocket, suscripción por ticket, optimistic UI, Dockerfiles multi-stage,
-  GitHub Actions, seed, tipos generados desde el esquema). Prioricé cerrar bien el alcance
+- **Los puntos bonus salvo el pipeline de CI** (protección contra replay, idempotencia por
+  `event_id`, reconexión automática del WebSocket, suscripción por ticket, optimistic UI,
+  Dockerfiles multi-stage, seed, tipos generados desde el esquema). Prioricé cerrar bien el alcance
   obligatorio. En particular, sin reconexión automática el indicador queda en "Desconectado" hasta
   recargar la página.
 - **Autenticación de usuarios y de MongoDB**: no se piden. MongoDB no publica su puerto fuera de la
@@ -247,4 +260,4 @@ recibe `409`.
 
 ## Tiempo real invertido
 
-_Pendiente de completar por el autor._
+5 horas.
