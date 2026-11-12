@@ -1,11 +1,12 @@
 # Decisiones
 
-### [Decisión] MongoDB o PostgresSQL
+### [Decisión] MongoDB o PostgreSQL
 
 **Contexto:** el enunciado permite PostgreSQL o MongoDB. Había que elegir y modelar tickets y su
 hilo de comentarios.
 
-**Uso de LLM:** le indiqué a Claude Code que usara MongoDB como BD y le pedí implementar el hilo de los comentarios para los tickets mediante un arreglo
+**Uso de LLM:** le indiqué a Claude Code que usara MongoDB como BD y le pedí implementar el hilo de los comentarios 
+para los tickets mediante un arreglo
 
 **Salida del modelo:** propuso embeber los comentarios como arreglo dentro del documento del ticket
 (`$push` atómico para comentar), excluirlos por proyección en el listado, usar `ObjectId` como `id`
@@ -14,6 +15,9 @@ y la API asíncrona nativa de PyMongo (`AsyncMongoClient`) en lugar de Motor, qu
 **Mi decisión:** acepté. El detalle siempre muestra ticket y comentarios juntos, así que una sola
 lectura es lo natural; descarté una colección aparte de comentarios porque solo se justifica si un
 ticket pudiera acumular suficientes comentarios para acercarse al límite de 16 MB por documento que tiene mongo.
+Con PostgreSQL necesitaría una tabla `comentarios` relacionada con `tickets` y hacer un join para
+mostrar el detalle; no tengo mucho conocimiento sobre joins, y con MongoDB el ticket y sus
+comentarios se leen en una sola consulta, sin necesidad de relacionar tablas.
 
 ### [Decisión] A donde va el estado de reabierto
 
@@ -63,5 +67,62 @@ limpieza desregistra handlers y cierra; el callback se guarda en un `ref` para n
 render; los mensajes se validan antes de usarse.
 
 **Mi decisión:** acepté. Envío en paralelo para que un cliente lento no retrase al resto. La
-reconexión automática no la implemente. 
+reconexión automática no la implementé porque es un punto bonus; preferí priorizar el resto de los
+requisitos obligatorios y asegurarme de que funcionaran correctamente.
 
+### [Decisión] Agregar Pipeline de Github Actions
+
+**Contexto:** es parte del bonus agregar un pipeline con lints y test para que cada que se suban cambios 
+a main poder checar que todo esta bien antes de subir cambios a una rama en especifico 
+
+**Uso de LLM:** le pedí que creara el .yml con el codigo para que por cada carpeta del monorepo ejecutara los test y lints.
+
+**Salida del modelo:** el archivo `.github/workflows/ci.yml`, que se ejecuta en cada `push` y
+`pull_request` a `main` con dos jobs en paralelo, uno por carpeta del monorepo: `backend` corre
+`ruff check`, `ruff format --check` y `pytest`, y `frontend` corre `npm run lint` y
+`npx tsc --noEmit`. Usa las mismas versiones que los Dockerfiles (Python 3.12 y Node 22) para que
+CI pruebe lo mismo que se ejecuta en los contenedores, e instala el frontend con `npm ci` en lugar
+de `npm install` para que las dependencias sean exactamente las del `package-lock.json`. Las
+actions (`checkout`, `setup-python` y `setup-node`) se actualizaron a la versión 7 después de
+revisar sus notas de versión y confirmar que no tenían cambios incompatibles con el workflow.
+
+**Mi decisión:** acepté. Considero importante para codigo desplegado antes de poder unirlo que se verifique con anterioridad 
+que lo que se esta tratando de subir no rompa lo que ya esta y se sigan los estandares del proyecto
+
+### [Decisión] Seed de datos de ejemplo manual en lugar de automático
+
+**Contexto:** uno de los bonus es un script de seed que cargue datos de ejemplo al iniciar.
+
+**Uso de LLM:** le pedí que agregara el script de seed.
+
+**Salida del modelo:** en su primera versión, `seed.py` se ejecutaba automáticamente al arrancar
+el backend si la colección estaba vacía, controlado por una variable `SEED_SAMPLE_DATA=true` en
+`.env.example`. Así, con los 4 comandos de arranque el dashboard ya aparecía con 12 tickets.
+
+**Mi decisión:** modifiqué. No quise que la base se llenara sola, así que le pedí que fuera un
+script de Python que se ejecute de forma manual (`docker compose exec backend python -m app.seed`);
+se eliminó la carga al arrancar y la variable `SEED_SAMPLE_DATA`. Mi razón es que, para probar el
+código, quiero ver primero el estado del dashboard sin ningún ticket y después, al ejecutar el
+seed, comprobar cómo se manejan los estados, filtros y paginación con datos. Esto me desvía a
+propósito del "al iniciar" del bonus. Una consecuencia es que, después de ejecutar el script, hay
+que recargar la página: el seed escribe directo en MongoDB sin pasar por el servicio del backend
+que emite los eventos WebSocket. La alternativa de que el seed creara los tickets a través de la
+API sí los mostraría en vivo, pero la descarté porque todos quedarían con fecha de creación de
+"ahora" y no es necesario para lo que busco probar.
+
+### [Decisión] Corregir el ejemplo de transición inválida del README
+
+**Contexto:** seguí el paso del README para probar una transición inválida (`{"estado":"cerrado"}`)
+y en lugar del `409` esperado obtuve `200` y el ticket quedó cerrado.
+
+**Uso de LLM:** le mostré la salida del `curl` y le pregunté por qué no me daba el error `409`.
+
+**Salida del modelo:** revisó los logs del backend y encontró que ese ticket ya estaba en
+`resuelto`, porque yo lo había movido desde la interfaz, y `resuelto → cerrado` es una transición
+válida. El backend funcionaba bien; el error estaba en el README, que asumía un ticket en `abierto`
+sin decirlo. Propuso cambiar el ejemplo para que cree un ticket nuevo y de inmediato intente
+cerrarlo, y aclarar que el `409` depende del estado actual del ticket.
+
+**Mi decisión:** acepté el cambio. Un ejemplo que depende de lo que se haya hecho antes no es
+reproducible para quien evalúa; con el ticket recién creado el resultado siempre es el mismo. Me
+sirvió también para no dar por buena la documentación sin ejecutarla.

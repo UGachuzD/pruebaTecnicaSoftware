@@ -31,10 +31,25 @@ docker compose up --build
 > Antes de usarlo fuera de local, cambia `WEBHOOK_SECRET` en `.env` por un valor aleatorio
 > (por ejemplo `openssl rand -hex 32`). `.env` está en `.gitignore`; solo se versiona `.env.example`.
 
+### Datos de ejemplo (seed)
+
+La base arranca vacía. Para cargar 12 tickets de ejemplo, con el stack levantado y desde otra
+terminal en la raíz del repositorio:
+
+```bash
+docker compose exec backend python -m app.seed
+```
+
+Los tickets cubren todos los estados y prioridades, algunos traen comentarios, y alcanzan para ver
+dos páginas en el dashboard. El script (`backend/app/seed.py`) solo inserta si la colección está
+vacía, así que ejecutarlo de nuevo no duplica datos ni toca tickets existentes. Para volver a
+empezar desde cero: `docker compose down -v && docker compose up`.
+
 ## Verificación
 
 1. Abre http://localhost:3000. El dashboard muestra el estado vacío y el indicador
-   **Conectado en vivo**.
+   **Conectado en vivo**. Si ejecutas el seed, recarga la página para ver los tickets de ejemplo y
+   prueba los filtros por estado y prioridad y la paginación.
 2. Crea un ticket (en otra terminal):
 
    ```bash
@@ -66,6 +81,9 @@ docker compose up --build
    ejemplo, es válida y responde `200`.
 
 5. Detén el backend (`docker compose stop backend`) y el indicador pasa a **Desconectado**.
+   Vuelve a levantarlo con `docker compose start backend` y **recarga la página**: no hay
+   reconexión automática del WebSocket (es un punto bonus que quedó fuera), así que el indicador
+   sigue en **Desconectado** hasta que recargas.
 
 ## API
 
@@ -138,7 +156,7 @@ Un cuerpo con firma válida pero JSON inválido o campos incorrectos responde `4
 cd backend
 python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/pytest           # máquina de estados + webhook
+.venv/bin/pytest           # máquina de estados, webhook y seed
 .venv/bin/ruff check .     # lint (PEP 8, imports, bugbear, pyupgrade…)
 .venv/bin/ruff format --check .
 ```
@@ -208,7 +226,8 @@ recibe `409`.
 │   │   ├── realtime/       # gestor de conexiones WebSocket
 │   │   ├── repositories/   # acceso a MongoDB
 │   │   ├── schemas/        # modelos Pydantic v2 de entrada/salida
-│   │   └── services/       # casos de uso: orquestan dominio, repositorio y eventos
+│   │   ├── services/       # casos de uso: orquestan dominio, repositorio y eventos
+│   │   └── seed.py         # script manual que inserta tickets de ejemplo
 │   └── tests/
 └── frontend/
     └── src/
@@ -243,9 +262,9 @@ recibe `409`.
 
 ## Qué dejé fuera y por qué
 
-- **Los puntos bonus salvo el pipeline de CI** (protección contra replay, idempotencia por
-  `event_id`, reconexión automática del WebSocket, suscripción por ticket, optimistic UI,
-  Dockerfiles multi-stage, seed, tipos generados desde el esquema). Prioricé cerrar bien el alcance
+- **Los puntos bonus salvo el pipeline de CI y el seed** (protección contra replay, idempotencia
+  por `event_id`, reconexión automática del WebSocket, suscripción por ticket, optimistic UI,
+  Dockerfiles multi-stage, tipos generados desde el esquema). Prioricé cerrar bien el alcance
   obligatorio. En particular, sin reconexión automática el indicador queda en "Desconectado" hasta
   recargar la página.
 - **Autenticación de usuarios y de MongoDB**: no se piden. MongoDB no publica su puerto fuera de la
